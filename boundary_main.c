@@ -4,12 +4,15 @@
  */
 
 #include "SDL.h"
+#include "libfreenect_sync.h"
 
 #define WIDTH 1024
 #define HEIGHT 768
 
 SDL_Surface *screen;
 SDL_Surface *render;
+
+int depths[WIDTH*HEIGHT];
 
 int
 sdl_init() {
@@ -39,6 +42,7 @@ sdl_init() {
 
   /* print some info about the obtained screen */
   printf("screen is %dx%d %dbpp\n", screen->w, screen->h, screen->format->BitsPerPixel);
+  return 1;
 }
 
 int
@@ -90,12 +94,12 @@ setPixel(SDL_Surface *pSurface, int x, int y, int color) {
 // #define SETPIXEL(x,y,col) *((int *) render->pixels + y * WIDTH + x) = col
 
 void
-draw_surroundings() {
+draw_depths() {
   int x,y;
   SDL_LockSurface(render);
   for (y = 0; y < HEIGHT; y++) {
     for (x = 0; x < WIDTH; x++) {
-      SETPIXEL(x, y, ((x%0xFF) << 16) | ((y%0xFF) << 8));
+      SETPIXEL(x, y, depths[y*WIDTH + x]);
     }
   }
   SDL_UnlockSurface(render);
@@ -103,18 +107,53 @@ draw_surroundings() {
   SDL_Flip(screen);
 }
 
+void
+kinect_poll() {
+  int x,y;
+  uint16_t *fdepths;
+  uint32_t timestamp;
+  if (!freenect_sync_get_depth((void **) &fdepths,
+                               &timestamp,
+                               0,
+                               FREENECT_DEPTH_11BIT)) {
+    printf("We got depths.");
+    for (y = 0; y < 480; y++) {
+      for (x = 0; x < 640; x++) {
+        depths[y*WIDTH+x] = (fdepths[y*640+x] * 0xFF) / 0x7FF;
+      }
+    }
+  }
+}
+
+int
+kinect_init() {
+  return 1;
+}
+
+int
+kinect_shutdown() {
+  freenect_sync_stop();
+}
+
 int
 main(int argc, char *argv[]) {
   if (!sdl_init()) {
-    return;
+    return 1;
+  }
+
+  if (!kinect_init()) {
+    return 1;
   }
 
   while (!sdl_pollevent()) {
     /* Sleep 1/10th of a second. */
     usleep(100000);
-    draw_surroundings();
+    kinect_poll();
+    draw_depths();
   }
 
   /* Shut down */
+  kinect_shutdown();
   sdl_shutdown();
+  return 0;
 }
