@@ -5,6 +5,7 @@ Makefile.in
 *.la
 *.lo
 *.o
+*.rc
 libtool
 ltmain.sh
 missing
