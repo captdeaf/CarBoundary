@@ -116,7 +116,6 @@ kinect_poll() {
                                &timestamp,
                                0,
                                FREENECT_DEPTH_11BIT)) {
-    printf("We got depths.");
     for (y = 0; y < 480; y++) {
       for (x = 0; x < 640; x++) {
         depths[y*WIDTH+x] = (fdepths[y*640+x] * 0xFF) / 0x7FF;
