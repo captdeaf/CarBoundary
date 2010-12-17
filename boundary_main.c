@@ -33,21 +33,20 @@ void
 fillDepths(int depths[]) {
   int i,j;
   int ci, cj;
+  int x;
   ci = WIDTH / 2;
   cj = HEIGHT / 2;
-  double di, dj;
-  double ni, nj;
-  for (j = cj-5; j >= 0; j--) {
+  // double di, dj;
+  // double ni, nj;
+  int nd;
+  for (j = cj+5; j < HEIGHT; j++) {
     for (i = 0; i < WIDTH; i++) {
-      if (depths[j*WIDTH+i] == 0) {
-        /* This pixel is empty. Inherit its value from the next one closer
-         * to cj,ci */
-        depths[j*WIDTH+i] = depths[(j+1)*WIDTH+i];
-        if (!depths[j*WIDTH+i])
-          depths[j*WIDTH+i] = depths[(j+1)*WIDTH+i+1];
-        if (!depths[j*WIDTH+i])
-          depths[j*WIDTH+i] = depths[(j+1)*WIDTH+i-1];
+      x = j*WIDTH+i;
+      nd = depths[x];
+      if (nd < depths[x-WIDTH]) {
+        nd = depths[x-WIDTH];
       }
+      depths[x] = nd;
     }
   }
 }
@@ -78,12 +77,13 @@ poll_one_device(int device,
                                &timestamp,
                                device,
                                FREENECT_DEPTH_11BIT)) {
-    printf("\n\n\n");
+    // printf("\n\n\n");
     for (j = 0; j < 480; j++) {
       va = vangle - (43.0 * (((double) j) / 480.0)) + 21.5;
       for (i = 0; i < 640; i++) {
         d = depthDistance[fdepths[j*640+i] & 0x7FF];
-        d *= horizDepthMultiplier[i] * vertDepthMultiplier[j];
+        d *= horizDepthMultiplier[i];
+        // d *= vertDepthMultiplier[j];
         /* It's not worth plotting if it's too far away or too close. */
         if (d > 0.1 && d < 30.0) {
           ha = hangle + (57.0 * (((double) i) / 640.0)) - 28.5;
@@ -110,7 +110,6 @@ poll_one_device(int device,
                 i, j, fdepths[j*640+i] & 0x7FF, d,
                 x, y, z);
           }
-          */
           if (((i == 9) || (i == 160) || (i == 320) || (i == 480) || (i == 631)) &&
               ((j == 9) || (j == 120) || (j == 240) || (j == 360) || (j == 470))) {
             printf("%d,%d point is %f meters in front of camera, %f meters "
@@ -118,6 +117,7 @@ poll_one_device(int device,
                    "ha: %f, va: %f\n",
                    j, i, y, x, z, ha, va);
           }
+          */
 
           /* Measurements are relative to the camera's position. Now adjust
            * for the base position. */
@@ -130,20 +130,22 @@ poll_one_device(int device,
           iy = (int) (y * (1024 / 10.0)); /* Pixels per meter */
           iz = (int) (z * (2048 / 2.0)); /* Depth units per meter */
 
-          if (ix >= 0 && ix < WIDTH &&
-              iy >= 0 && iy < HEIGHT) {
-            if (iz > 2048) iz = 2046;
-            if (iz > 0 && iz < 2048) {
-              if (depths[iy*WIDTH+ix] < iz) {
-                depths[iy*WIDTH + ix] = iz;
+          if (z < 1.5) {
+            if (ix >= 0 && ix < WIDTH &&
+                iy >= 0 && iy < HEIGHT) {
+              if (iz > 2048) iz = 2046;
+              if (iz > 0 && iz < 2048) {
+                if (depths[iy*WIDTH+ix] < iz) {
+                  depths[iy*WIDTH+ix] = iz;
+                }
               }
             }
           }
         }
       }
     }
-    // fillDepths(depths);
   }
+  fillDepths(depths);
 }
 
 void
@@ -211,16 +213,20 @@ kinect_init() {
   for (i = 0; i < 640; i++) {
     angle = (57.0 * (i / 640.0)) - 28.5;
     horizDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
+    /*
     if (!(i&63)) {
       printf("HorizDepthMultiplier[%d] = %f\n", i, horizDepthMultiplier[i]);
     }
+    */
   }
   for (i = 0; i < 480; i++) {
     angle = (43.0 * (i / 480.0)) - 21.5;
     vertDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
+    /*
     if (!(i&63)) {
       printf("VertDepthMultiplier[%d] = %f\n", i, vertDepthMultiplier[i]);
     }
+    */
   }
   return 1;
 }
