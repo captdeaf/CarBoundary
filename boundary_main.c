@@ -5,14 +5,17 @@
 
 #include "SDL.h"
 #include "libfreenect_sync.h"
+#include <math.h>
 
 #define WIDTH 1024
-#define HEIGHT 768
+#define HEIGHT 1024
 
 SDL_Surface *screen;
 SDL_Surface *render;
 
 int depths[WIDTH*HEIGHT];
+float depthDistance[2048];
+int depthColors[2048];
 
 int
 sdl_init() {
@@ -99,7 +102,7 @@ draw_depths() {
   SDL_LockSurface(render);
   for (y = 0; y < HEIGHT; y++) {
     for (x = 0; x < WIDTH; x++) {
-      SETPIXEL(x, y, depths[y*WIDTH + x]);
+      SETPIXEL(x, y, depthColors[depths[y*WIDTH + x]]);
     }
   }
   SDL_UnlockSurface(render);
@@ -108,24 +111,53 @@ draw_depths() {
 }
 
 void
-kinect_poll() {
+poll_one_device(int device,
+                float baseX, float baseY, float baseZ,
+                float hangle, float vangle) {
   int x,y;
   uint16_t *fdepths;
   uint32_t timestamp;
   if (!freenect_sync_get_depth((void **) &fdepths,
                                &timestamp,
-                               0,
+                               device,
                                FREENECT_DEPTH_11BIT)) {
     for (y = 0; y < 480; y++) {
       for (x = 0; x < 640; x++) {
-        depths[y*WIDTH+x] = (fdepths[y*640+x] * 0xFF) / 0x7FF;
+        depths[y*WIDTH+x] = (fdepths[y*640+x] * 0xFF) % 0x7FF;
       }
     }
   }
 }
 
+void
+kinect_poll() {
+  poll_one_device(0, 50.0f, 50.0f, 50.0f, 50.0f, 50.0f);
+}
+
+/* Pixel distance lookup ganked from ofxKinect and
+ * http://openkinect.org/wiki/Imaging_Information
+ */
 int
 kinect_init() {
+  int i;
+  const float k1 = 0.1236;
+  const float k2 = 2842.5;
+  const float k3 = 1.1863;
+  const float k4 = 0.0370;
+
+  /* Populate depthDistance[i], in centimeters. */
+  for (i = 0; i < 2047; i++) {
+    depthDistance[i] = k1 * tanf(i / k2 + k3) - k4;
+    depthDistance[i] *= 100;
+    /* Colors; Red for bits 0-4, green for bits 5-8, blue for 9-11 */
+    depthColors[i] =
+        ((i & 0xF) << 20) /* Red */
+      | ((i & 0xF0) << 8) /* Green */
+      | ((i & 0xF00) >> 3) /* Blue */
+      ;
+  }
+  depthDistance[i] = 0.0f;
+  depthColors[i] = 0;
   return 1;
 }
 
@@ -146,7 +178,7 @@ main(int argc, char *argv[]) {
 
   while (!sdl_pollevent()) {
     /* Sleep 1/10th of a second. */
-    usleep(100000);
+    usleep(30000);
     kinect_poll();
     draw_depths();
   }
