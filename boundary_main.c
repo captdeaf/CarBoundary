@@ -7,95 +7,11 @@
 #include <SDL_gfxPrimitives.h>
 #include "libfreenect_sync.h"
 #include <math.h>
-
-#define WIDTH 1024
-#define HEIGHT 1024
-
-SDL_Surface *screen;
-SDL_Surface *render;
+#include "boundary_sdl.h"
 
 int depths[WIDTH*HEIGHT];
 double depthDistance[2048];
 int depthColors[2048];
-
-int
-sdl_init() {
-  /* startup SDL */
-  if (SDL_Init(SDL_INIT_VIDEO)==-1) {
-    printf("SDL_Init: %s\n", SDL_GetError());
-    return 0;
-  }
-
-  screen=SDL_SetVideoMode(WIDTH, HEIGHT, 32, SDL_DOUBLEBUF | SDL_ANYFORMAT);
-  if (!screen) {
-    printf("SDL_SetVideoMode: %s\n", SDL_GetError());
-    SDL_Quit();
-    return 0;
-  }
-
-  render = SDL_CreateRGBSurface(SDL_SWSURFACE, WIDTH, HEIGHT, 32,
-                                0xFF << 16, 0xFF << 8, 0xFF, 0xFF << 24);
-  if (!render) {
-    printf("SDL_CreateRGBSurface: %s\n", SDL_GetError());
-    SDL_Quit();
-    return 0;
-  }
-
-  /* set the window title to the filename */
-  SDL_WM_SetCaption("CarBoundary", "CarBoundary");
-
-  /* print some info about the obtained screen */
-  printf("screen is %dx%d %dbpp\n", screen->w, screen->h, screen->format->BitsPerPixel);
-  return 1;
-}
-
-int
-sdl_pollevent() {
-  SDL_Event event;
-  int done = 0;
-  /* the event loop, redraws if needed, quits on keypress or quit event */
-  while(!done && SDL_PollEvent(&event)) {
-    switch(event.type) {
-    case SDL_KEYDOWN:
-    case SDL_QUIT:
-      /* quit events, exit the event loop */
-      done=1;
-      break;
-    case SDL_VIDEOEXPOSE:
-      /* need a redraw, we just redraw the whole screen for simplicity */
-      SDL_BlitSurface(render,0,screen,0);
-      SDL_Flip(screen);
-      break;
-    default:
-      break;
-    }
-  }
-  return done;
-}
-
-void
-sdl_shutdown() {
-  /* free the loaded surfaces */
-  SDL_FreeSurface(render);
-
-  /* shutdown SDL */
-  SDL_Quit();
-}
-
-void
-setPixel(SDL_Surface *pSurface, int x, int y, int color) {
-  int col = SDL_MapRGB(pSurface->format,
-                       (color & 0xFF0000) >> 16,
-                       (color & 0xFF00) >> 8,
-                       (color & 0xFF));
-  char *pPosition = (char *) pSurface->pixels;
-  pPosition += (pSurface->pitch * y);
-  pPosition += (pSurface->format->BytesPerPixel * x);
-  memcpy(pPosition, &col, pSurface->format->BytesPerPixel);
-}
-
-#define SETPIXEL(x,y,col) setPixel(render, x, y, col)
-// #define SETPIXEL(x,y,col) *((int *) render->pixels + y * WIDTH + x) = col
 
 void
 draw_depths() {
@@ -103,7 +19,7 @@ draw_depths() {
   SDL_LockSurface(render);
   for (y = 0; y < HEIGHT; y++) {
     for (x = 0; x < WIDTH; x++) {
-      SETPIXEL(x, y, depthColors[depths[y*WIDTH + x]]);
+      setPixel(x, y, depthColors[depths[y*WIDTH + x]]);
     }
   }
   SDL_UnlockSurface(render);
@@ -135,7 +51,7 @@ fillDepths(int depths[]) {
 }
 
 /**
- * The depth map is 20 meters by 20 meters.
+ * The depth map is 10 meters by 10 meters.
  *
  * depthDistance[depthval] is the distance in meters.
  */
@@ -174,8 +90,7 @@ poll_one_device(int device,
           double dh = d * cos(DEG2RAD(va));
           y = dh * cos(DEG2RAD(ha));
           x = dh * sin(DEG2RAD(ha));
-          z = d * cos(DEG2RAD(va+90.0));
-          y = -y;
+          z = d * sin(DEG2RAD(va));
           /* Approximation approach: Broken. */
           /*
           y = (i - 320) * (d - 10.0) * (640/480) * 0.0021;
@@ -192,6 +107,12 @@ poll_one_device(int device,
                 x, y, z);
           }
           */
+          if (0 && i == 320 && j == 240) {
+            printf("Center vangle: %f, hangle: %f\n", vangle, hangle);
+            printf("Center point is %f meters in front of camera, %f meters "
+                   "to the side, and is %f meters above the camera.\n",
+                   y, x, z);
+          }
 
           /* Measurements are relative to the camera's position. Now adjust
            * for the base position. */
@@ -200,8 +121,8 @@ poll_one_device(int device,
           z += baseZ;
 
           /* Now PLOT onto the depth chart! */
-          ix = (int) (x * (1024 / 20.0)); /* Pixels per meter */
-          iy = (int) (y * (1024 / 20.0)); /* Pixels per meter */
+          ix = (int) (x * (1024 / 10.0)); /* Pixels per meter */
+          iy = (int) (y * (1024 / 10.0)); /* Pixels per meter */
           iz = (int) (z * (2048 / 2.0)); /* Depth units per meter */
 
           if (ix >= 0 && ix < WIDTH &&
@@ -235,7 +156,7 @@ kinect_poll() {
   /* It's in the center (10m, 10m). Half a meter off the ground (0.5m),
    * pointing straight forward (0.0) and resting flat and horizontal (0.0)
    */
-  poll_one_device(0, 10.0, 10.0, 0.5, 0.0, 0.0);
+  poll_one_device(0, 5.0, 5.0, 0.5, 0.0, 0.0);
 }
 
 /* Pixel distance lookup ganked from ofxKinect and
@@ -253,9 +174,11 @@ kinect_init() {
   for (i = 1; i < 2047; i++) {
     depthDistance[i] = k1 * tan((i/k2) + k3) - k4;
     /* Colors; Red for bits 0-4, green for bits 5-8, blue for 9-11 */
+    /*
     if (!(i&0x7F)) {
       printf("At distance %d (%f), meters is %f\n", i, i/k2, depthDistance[i]);
     }
+    */
     /* Psychedelic:
     depthColors[i] =
         ((i & 0xF) << 20) // Red
@@ -266,8 +189,13 @@ kinect_init() {
     /* Blue shades: */
     depthColors[i] =
           0xFF // blue
-        | 0x0101 * (i/4);
+        | (0x010100 * (i>>2));
         /**/
+    /*
+    if (!(i&0x7F)) {
+      printf("At height %d, color is %.6X\n", i, depthColors[i]);
+    }
+    */
   }
   depthDistance[2047] = 0.0;
   depthColors[2047] = 0;
