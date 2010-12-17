@@ -12,6 +12,8 @@
 int depths[WIDTH*HEIGHT];
 double depthDistance[2048];
 int depthColors[2048];
+double horizDepthMultiplier[640];
+double vertDepthMultiplier[480];
 
 void
 draw_depths() {
@@ -76,10 +78,12 @@ poll_one_device(int device,
                                &timestamp,
                                device,
                                FREENECT_DEPTH_11BIT)) {
+    printf("\n\n\n");
     for (j = 0; j < 480; j++) {
-      va = vangle + (43.0 * (((double) j) / 480.0)) - 28.5;
+      va = vangle - (43.0 * (((double) j) / 480.0)) + 21.5;
       for (i = 0; i < 640; i++) {
         d = depthDistance[fdepths[j*640+i] & 0x7FF];
+        d *= horizDepthMultiplier[i] * vertDepthMultiplier[j];
         /* It's not worth plotting if it's too far away or too close. */
         if (d > 0.1 && d < 30.0) {
           ha = hangle + (57.0 * (((double) i) / 640.0)) - 28.5;
@@ -107,11 +111,12 @@ poll_one_device(int device,
                 x, y, z);
           }
           */
-          if (0 && i == 320 && j == 240) {
-            printf("Center vangle: %f, hangle: %f\n", vangle, hangle);
-            printf("Center point is %f meters in front of camera, %f meters "
-                   "to the side, and is %f meters above the camera.\n",
-                   y, x, z);
+          if (((i == 9) || (i == 160) || (i == 320) || (i == 480) || (i == 631)) &&
+              ((j == 9) || (j == 120) || (j == 240) || (j == 360) || (j == 470))) {
+            printf("%d,%d point is %f meters in front of camera, %f meters "
+                   "to the side, and is %f meters above the camera. "
+                   "ha: %f, va: %f\n",
+                   j, i, y, x, z, ha, va);
           }
 
           /* Measurements are relative to the camera's position. Now adjust
@@ -153,10 +158,10 @@ kinect_poll() {
   /* For each device we have, plot its detected collisions. */
 
   /* Just one device for now: */
-  /* It's in the center (10m, 10m). Half a meter off the ground (0.5m),
+  /* It's in the center (10m, 10m). A half meter off the ground (0.5m),
    * pointing straight forward (0.0) and resting flat and horizontal (0.0)
    */
-  poll_one_device(0, 5.0, 5.0, 0.5, 0.0, 0.0);
+  poll_one_device(0, 5.0, 5.0, 0.7874, 0.0, 0.0);
 }
 
 /* Pixel distance lookup ganked from ofxKinect and
@@ -189,7 +194,7 @@ kinect_init() {
     /* Blue shades: */
     depthColors[i] =
           0xFF // blue
-        | (0x010100 * (i>>2));
+        | (0x010100 * ((2048-i)>>2));
         /**/
     /*
     if (!(i&0x7F)) {
@@ -200,6 +205,23 @@ kinect_init() {
   depthDistance[2047] = 0.0;
   depthColors[2047] = 0;
   depthColors[0] = 0xFFFFFF;
+
+  /* Since depth is weirdly curved. */
+  double angle;
+  for (i = 0; i < 640; i++) {
+    angle = (57.0 * (i / 640.0)) - 28.5;
+    horizDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
+    if (!(i&63)) {
+      printf("HorizDepthMultiplier[%d] = %f\n", i, horizDepthMultiplier[i]);
+    }
+  }
+  for (i = 0; i < 480; i++) {
+    angle = (43.0 * (i / 480.0)) - 21.5;
+    vertDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
+    if (!(i&63)) {
+      printf("VertDepthMultiplier[%d] = %f\n", i, vertDepthMultiplier[i]);
+    }
+  }
   return 1;
 }
 
