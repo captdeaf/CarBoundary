@@ -20,7 +20,7 @@ INC="$FREENECT_I $LIBUSB_I $SDL_I"
 
 FREENECT="-Lext/libfreenect/lib -lfreenect -lfreenect_sync"
 LIBUSB="-Lext/libusb/libusb/.libs -lusb-1.0"
-SDL="`sdl-config --libs`"
+SDL="`sdl-config --libs` -lSDL_gfx"
 LIB="$FREENECT $LIBUSB $SDL"
 
 set -x
