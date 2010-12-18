@@ -9,14 +9,6 @@
 #include <math.h>
 #include "boundary_sdl.h"
 
-#define SENSOR_WIDTH 640
-#define SENSOR_WIDTHD 640.0
-#define SENSOR_HEIGHT 480
-#define SENSOR_HEIGHTD 480.0
-
-#define VANGLE 43.0
-#define HANGLE 57.0
-
 struct _kdevice_definition_ {
   int device;
   double baseX;
@@ -26,13 +18,9 @@ struct _kdevice_definition_ {
   double vangle;
 };
 
-/* This list must end in a device id < 0. */
-struct _kdevice_definition_ deviceDefinitions[] = {
-  {0,  5.0, 5.0, 0.7874, 0.0, 0.0},
-  {-1, 0.0, 0.0, 0.0,    0.0, 0.0},
-};
+#include "device_definitions.h"
 
-int depths[WIDTH*HEIGHT];
+int depths[SCREEN_WIDTH * SCREEN_HEIGHT];
 double depthDistance[2048];
 int depthColors[2048];
 double horizDepthMultiplier[SENSOR_WIDTH];
@@ -56,9 +44,9 @@ void
 draw_depths() {
   int x,y;
   SDL_LockSurface(render);
-  for (y = 0; y < HEIGHT; y++) {
-    for (x = 0; x < WIDTH; x++) {
-      setPixel(x, y, depthColors[depths[y*WIDTH + x]]);
+  for (y = 0; y < SCREEN_HEIGHT; y++) {
+    for (x = 0; x < SCREEN_WIDTH; x++) {
+      setPixel(x, y, depthColors[depths[y*SCREEN_WIDTH + x]]);
     }
   }
   SDL_UnlockSurface(render);
@@ -71,17 +59,17 @@ fillDepths(int depths[]) {
   int i,j;
   int ci, cj;
   int x;
-  ci = WIDTH / 2;
-  cj = HEIGHT / 2;
+  ci = SCREEN_WIDTH / 2;
+  cj = SCREEN_HEIGHT / 2;
   // double di, dj;
   // double ni, nj;
   int nd;
-  for (j = cj+5; j < HEIGHT; j++) {
-    for (i = 0; i < WIDTH; i++) {
-      x = j*WIDTH+i;
+  for (j = cj+5; j < SCREEN_HEIGHT; j++) {
+    for (i = 0; i < SCREEN_WIDTH; i++) {
+      x = j*SCREEN_WIDTH+i;
       nd = depths[x];
-      if (nd < depths[x-WIDTH]) {
-        nd = depths[x-WIDTH];
+      if (nd < depths[x-SCREEN_WIDTH]) {
+        nd = depths[x-SCREEN_WIDTH];
       }
       depths[x] = nd;
     }
@@ -101,12 +89,12 @@ init_one_device(KDevice *dev, int device,
   dev->baseZ = baseZ;
 
   for (i = 0; i < SENSOR_WIDTH; i++) {
-    dev->hangle[i] = hangle + (HANGLE * (i / SENSOR_WIDTHD)) - (HANGLE/2);
+    dev->hangle[i] = hangle + (HANGLE * (i / SENSOR_WIDTH_D)) - (HANGLE/2);
     dev->dx[i] = sin(DEG2RAD(dev->hangle[i]));
     dev->dy[i] = cos(DEG2RAD(dev->hangle[i]));
   }
   for (i = 0; i < SENSOR_HEIGHT; i++) {
-    dev->vangle[i] = vangle - (VANGLE * (i / SENSOR_HEIGHTD)) + (VANGLE/2);
+    dev->vangle[i] = vangle - (VANGLE * (i / SENSOR_HEIGHT_D)) + (VANGLE/2);
     dev->dvv[i] = sin(DEG2RAD(dev->vangle[i]));
     dev->dvh[i] = cos(DEG2RAD(dev->vangle[i]));
   }
@@ -128,7 +116,6 @@ poll_one_device(KDevice *dev) {
   double d;
   double x, y, z;
   double ha, va;
-  int ix, iy, iz;
   if (!freenect_sync_get_depth((void **) &fdepths,
                                &timestamp,
                                dev->device,
@@ -185,24 +172,26 @@ poll_one_device(KDevice *dev) {
           z += dev->baseZ;
 
           /* Now PLOT onto the depth chart! */
-          double plotX = x * (1024 / 10.0); /* Pixels per meter */
-          double plotY = y * (1024 / 10.0); /* Pixels per meter */
+          double plotX = x * SCREEN_SCALE;
+          double plotY = y * SCREEN_SCALE;
           double plotZ = z * (2048 / 2.0); /* Depth units per meter */
 
 #define ix ((int) plotX)
 #define iy ((int) plotY)
-#define iz ((int) plotZ)
+          int iz = (int) plotZ;
 
-          if (z >= 0 && z < 1.5) {
-            while (ix >= 0 && ix < WIDTH &&
-                iy >= 0 && iy < HEIGHT) {
-              if (iz > 0 && iz < 2048) {
-                if (depths[iy*WIDTH+ix] < iz) {
-                  depths[iy*WIDTH+ix] = iz;
-                }
-                plotX += dx;
-                plotY += dy;
+          if (z >= Z_MIN && z < Z_MAX) {
+            while (ix >= 0 && ix < SCREEN_WIDTH &&
+                iy >= 0 && iy < SCREEN_HEIGHT) {
+              if (depths[iy*SCREEN_WIDTH+ix] < iz) {
+                depths[iy*SCREEN_WIDTH+ix] = iz;
               }
+              plotX += dx;
+              plotY += dy;
+#if DOFILL
+#else
+              break;
+#endif
             }
           }
         }
@@ -278,7 +267,7 @@ kinect_init() {
   /* Since depth is weirdly curved. */
   double angle;
   for (i = 0; i < SENSOR_WIDTH; i++) {
-    angle = (HANGLE * (i / SENSOR_WIDTHD)) - (HANGLE/2);
+    angle = (HANGLE * (i / SENSOR_WIDTH_D)) - (HANGLE/2);
     horizDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
     /*
     if (!(i&63)) {
@@ -287,7 +276,7 @@ kinect_init() {
     */
   }
   for (i = 0; i < SENSOR_HEIGHT; i++) {
-    angle = (VANGLE * (i / SENSOR_HEIGHTD)) - (VANGLE/2);
+    angle = (VANGLE * (i / SENSOR_HEIGHT_D)) - (VANGLE/2);
     vertDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
     /*
     if (!(i&63)) {
@@ -309,16 +298,18 @@ kinect_init() {
             deviceDefinitions[i].hangle,
             deviceDefinitions[i].vangle);
   }
+  return 1;
 }
 
 int
 kinect_shutdown() {
   freenect_sync_stop();
+  return 1;
 }
 
 int
 main(int argc, char *argv[]) {
-  if (!sdl_init()) {
+  if (!sdl_init(SCREEN_HEIGHT, SCREEN_WIDTH)) {
     return 1;
   }
 

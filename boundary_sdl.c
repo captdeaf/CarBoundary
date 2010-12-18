@@ -8,22 +8,27 @@
 SDL_Surface *screen;
 SDL_Surface *render;
 
+static int ScreenHeight;
+static int ScreenWidth;
+
 int
-sdl_init() {
+sdl_init(int height, int width) {
+  ScreenHeight = height;
+  ScreenWidth = width;
   /* startup SDL */
   if (SDL_Init(SDL_INIT_VIDEO)==-1) {
     printf("SDL_Init: %s\n", SDL_GetError());
     return 0;
   }
 
-  screen=SDL_SetVideoMode(WIDTH, HEIGHT, 32, SDL_DOUBLEBUF | SDL_ANYFORMAT);
+  screen=SDL_SetVideoMode(ScreenWidth, ScreenHeight, 32, SDL_DOUBLEBUF | SDL_ANYFORMAT);
   if (!screen) {
     printf("SDL_SetVideoMode: %s\n", SDL_GetError());
     SDL_Quit();
     return 0;
   }
 
-  render = SDL_CreateRGBSurface(SDL_SWSURFACE, WIDTH, HEIGHT, 32,
+  render = SDL_CreateRGBSurface(SDL_SWSURFACE, ScreenWidth, ScreenHeight, 32,
                                 0xFF << 16, 0xFF << 8, 0xFF, 0xFF << 24);
   if (!render) {
     printf("SDL_CreateRGBSurface: %s\n", SDL_GetError());
@@ -80,7 +85,7 @@ setPixel(int x, int y, int color) {
                        (color & 0xFF));
   char *pPosition = (char *) render->pixels;
   /* Since SDL is top-down */
-  y = HEIGHT - y - 1;
+  y = ScreenHeight - y - 1;
   pPosition += (render->pitch * y);
   pPosition += (render->format->BytesPerPixel * x);
   memcpy(pPosition, &col, render->format->BytesPerPixel);

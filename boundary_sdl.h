@@ -9,13 +9,10 @@
 #include <SDL.h>
 #include <SDL_gfxPrimitives.h>
 
-#define WIDTH 1024
-#define HEIGHT 1024
-
 extern SDL_Surface *screen;
 extern SDL_Surface *render;
 
-int sdl_init();
+int sdl_init(int height, int width);
 int sdl_pollevent();
 void sdl_shutdown();
 void setPixel(int x, int y, int color);
