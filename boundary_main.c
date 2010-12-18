@@ -9,11 +9,48 @@
 #include <math.h>
 #include "boundary_sdl.h"
 
+#define SENSOR_WIDTH 640
+#define SENSOR_WIDTHD 640.0
+#define SENSOR_HEIGHT 480
+#define SENSOR_HEIGHTD 480.0
+
+#define VANGLE 43.0
+#define HANGLE 57.0
+
+struct _kdevice_definition_ {
+  int device;
+  double baseX;
+  double baseY;
+  double baseZ;
+  double hangle;
+  double vangle;
+};
+
+/* This list must end in a device id < 0. */
+struct _kdevice_definition_ deviceDefinitions[] = {
+  {0,  5.0, 5.0, 0.7874, 0.0, 0.0},
+  {-1, 0.0, 0.0, 0.0,    0.0, 0.0},
+};
+
 int depths[WIDTH*HEIGHT];
 double depthDistance[2048];
 int depthColors[2048];
-double horizDepthMultiplier[640];
-double vertDepthMultiplier[480];
+double horizDepthMultiplier[SENSOR_WIDTH];
+double vertDepthMultiplier[SENSOR_HEIGHT];
+
+typedef struct _kdevice_ {
+  int device;
+  double vangle[SENSOR_HEIGHT];
+  double hangle[SENSOR_WIDTH];
+  double dvv[SENSOR_HEIGHT];
+  double dvh[SENSOR_HEIGHT];
+  double dx[SENSOR_WIDTH];
+  double dy[SENSOR_WIDTH];
+  double baseX, baseY, baseZ;
+} KDevice;
+
+KDevice *devices;
+int numDevices;
 
 void
 draw_depths() {
@@ -51,6 +88,29 @@ fillDepths(int depths[]) {
   }
 }
 
+#define PI 3.141592654
+#define DEG2RAD(x) (x * (PI / 180.0))
+void
+init_one_device(KDevice *dev, int device,
+                double baseX, double baseY, double baseZ,
+                double hangle, double vangle) {
+  int i;
+  dev->device = device;
+  dev->baseX = baseX;
+  dev->baseY = baseY;
+  dev->baseZ = baseZ;
+
+  for (i = 0; i < SENSOR_WIDTH; i++) {
+    dev->hangle[i] = hangle + (HANGLE * (i / SENSOR_WIDTHD)) - (HANGLE/2);
+    dev->dx[i] = sin(DEG2RAD(dev->hangle[i]));
+    dev->dy[i] = cos(DEG2RAD(dev->hangle[i]));
+  }
+  for (i = 0; i < SENSOR_HEIGHT; i++) {
+    dev->vangle[i] = vangle - (VANGLE * (i / SENSOR_HEIGHTD)) + (VANGLE/2);
+    dev->dvv[i] = sin(DEG2RAD(dev->vangle[i]));
+    dev->dvh[i] = cos(DEG2RAD(dev->vangle[i]));
+  }
+}
 /**
  * The depth map is 10 meters by 10 meters.
  *
@@ -60,12 +120,8 @@ fillDepths(int depths[]) {
 /* baseX, Y, Z are in meters.
  * hangle and vangle are in degerees.
  */
-#define PI 3.141592654
-#define DEG2RAD(x) (x * (PI / 180.0))
 void
-poll_one_device(int device,
-                double baseX, double baseY, double baseZ,
-                double hangle, double vangle) {
+poll_one_device(KDevice *dev) {
   int i,j;
   uint16_t *fdepths;
   uint32_t timestamp;
@@ -75,32 +131,32 @@ poll_one_device(int device,
   int ix, iy, iz;
   if (!freenect_sync_get_depth((void **) &fdepths,
                                &timestamp,
-                               device,
+                               dev->device,
                                FREENECT_DEPTH_11BIT)) {
     // printf("\n\n\n");
-    for (j = 0; j < 480; j++) {
-      va = vangle - (43.0 * (((double) j) / 480.0)) + 21.5;
-      for (i = 0; i < 640; i++) {
-        d = depthDistance[fdepths[j*640+i] & 0x7FF];
+    for (j = 0; j < SENSOR_HEIGHT; j++) {
+      va = dev->vangle[j];
+      for (i = 0; i < SENSOR_WIDTH; i++) {
+        d = depthDistance[fdepths[j*SENSOR_WIDTH+i] & 0x7FF];
         d *= horizDepthMultiplier[i];
         // d *= vertDepthMultiplier[j];
         /* It's not worth plotting if it's too far away or too close. */
         if (d > 0.1 && d < 30.0) {
-          ha = hangle + (57.0 * (((double) i) / 640.0)) - 28.5;
+          ha = dev->hangle[i];
 
           /* We have spherical coordinates, and now we need to convert that to
            * cartesian coordiantes. */
           /* Trig approach. Needs tweaking? */
-          double dh = d * cos(DEG2RAD(va));
-          double dx = sin(DEG2RAD(ha));
-          double dy = cos(DEG2RAD(ha));
+          double dh = d * dev->dvh[j];
+          double dx = dev->dx[i];
+          double dy = dev->dy[i];
           y = dh * dy;
           x = dh * dx;
-          z = d * sin(DEG2RAD(va));
+          z = d * dev->dvv[j];
 
           /* Approximation approach: Broken. */
           /*
-          y = (i - 320) * (d - 10.0) * (640/480) * 0.0021;
+          y = (i - (SENSOR_WIDTH/2)) * (d - 10.0) * (SENSOR_WIDTH/SENSOR_HEIGHT) * 0.0021;
           z = (j - 240) * (d - 10.0) * 0.0021;
           x = d;
           */
@@ -110,7 +166,7 @@ poll_one_device(int device,
             printf("%d,%d:%f meters away. %f meters horizontally, %f vert",
                 i, j, d, dh, z);
             printf("%d,%d:%d/%f %f meters ahead, %f meters to the side, %f meters tall.\n",
-                i, j, fdepths[j*640+i] & 0x7FF, d,
+                i, j, fdepths[j*SENSOR_WIDTH+i] & 0x7FF, d,
                 x, y, z);
           }
           if (((i == 9) || (i == 160) || (i == 320) || (i == 480) || (i == 631)) &&
@@ -124,9 +180,9 @@ poll_one_device(int device,
 
           /* Measurements are relative to the camera's position. Now adjust
            * for the base position. */
-          x += baseX;
-          y += baseY;
-          z += baseZ;
+          x += dev->baseX;
+          y += dev->baseY;
+          z += dev->baseZ;
 
           /* Now PLOT onto the depth chart! */
           double plotX = x * (1024 / 10.0); /* Pixels per meter */
@@ -171,7 +227,10 @@ kinect_poll() {
   /* It's in the center (10m, 10m). A half meter off the ground (0.5m),
    * pointing straight forward (0.0) and resting flat and horizontal (0.0)
    */
-  poll_one_device(0, 5.0, 5.0, 0.7874, 0.0, 0.0);
+  int i;
+  for (i = 0; i < numDevices; i++) {
+    poll_one_device(&devices[i]);
+  }
 }
 
 /* Pixel distance lookup ganked from ofxKinect and
@@ -218,8 +277,8 @@ kinect_init() {
 
   /* Since depth is weirdly curved. */
   double angle;
-  for (i = 0; i < 640; i++) {
-    angle = (57.0 * (i / 640.0)) - 28.5;
+  for (i = 0; i < SENSOR_WIDTH; i++) {
+    angle = (HANGLE * (i / SENSOR_WIDTHD)) - (HANGLE/2);
     horizDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
     /*
     if (!(i&63)) {
@@ -227,8 +286,8 @@ kinect_init() {
     }
     */
   }
-  for (i = 0; i < 480; i++) {
-    angle = (43.0 * (i / 480.0)) - 21.5;
+  for (i = 0; i < SENSOR_HEIGHT; i++) {
+    angle = (VANGLE * (i / SENSOR_HEIGHTD)) - (VANGLE/2);
     vertDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
     /*
     if (!(i&63)) {
@@ -236,7 +295,20 @@ kinect_init() {
     }
     */
   }
-  return 1;
+
+  /* Init the devices. */
+  for (numDevices = 0; deviceDefinitions[numDevices].device >= 0; numDevices++);
+  /* Create the devices. */
+  devices = malloc(numDevices * sizeof(KDevice));
+  for (i = 0; i < numDevices; i++) {
+    init_one_device(&devices[i],
+            deviceDefinitions[i].device,
+            deviceDefinitions[i].baseX,
+            deviceDefinitions[i].baseY,
+            deviceDefinitions[i].baseZ,
+            deviceDefinitions[i].hangle,
+            deviceDefinitions[i].vangle);
+  }
 }
 
 int
