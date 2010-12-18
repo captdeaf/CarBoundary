@@ -21,10 +21,13 @@ struct _kdevice_definition_ {
 #include "device_definitions.h"
 
 int depths[SCREEN_WIDTH * SCREEN_HEIGHT];
+#define DEPTH_AT(y, x) depths[y*SCREEN_WIDTH + x]
 double depthDistance[2048];
-int depthColors[2048];
 double horizDepthMultiplier[SENSOR_WIDTH];
 double vertDepthMultiplier[SENSOR_HEIGHT];
+
+/* Color map */
+int colorMap[31];
 
 typedef struct _kdevice_ {
   int device;
@@ -46,7 +49,7 @@ draw_depths() {
   SDL_LockSurface(render);
   for (y = 0; y < SCREEN_HEIGHT; y++) {
     for (x = 0; x < SCREEN_WIDTH; x++) {
-      setPixel(x, y, depthColors[depths[y*SCREEN_WIDTH + x]]);
+      setPixel(x, y, Z_COLOR(DEPTH_AT(y,x)));
     }
   }
   SDL_UnlockSurface(render);
@@ -148,23 +151,6 @@ poll_one_device(KDevice *dev) {
           x = d;
           */
 
-          /*
-          if (!(i&0x5f) && !(j & 0x5f)) {
-            printf("%d,%d:%f meters away. %f meters horizontally, %f vert",
-                i, j, d, dh, z);
-            printf("%d,%d:%d/%f %f meters ahead, %f meters to the side, %f meters tall.\n",
-                i, j, fdepths[j*SENSOR_WIDTH+i] & 0x7FF, d,
-                x, y, z);
-          }
-          if (((i == 9) || (i == 160) || (i == 320) || (i == 480) || (i == 631)) &&
-              ((j == 9) || (j == 120) || (j == 240) || (j == 360) || (j == 470))) {
-            printf("%d,%d point is %f meters in front of camera, %f meters "
-                   "to the side, and is %f meters above the camera. "
-                   "ha: %f, va: %f\n",
-                   j, i, y, x, z, ha, va);
-          }
-          */
-
           /* Measurements are relative to the camera's position. Now adjust
            * for the base position. */
           x += dev->baseX;
@@ -174,17 +160,36 @@ poll_one_device(KDevice *dev) {
           /* Now PLOT onto the depth chart! */
           double plotX = x * SCREEN_SCALE;
           double plotY = y * SCREEN_SCALE;
-          double plotZ = z * (2048 / 2.0); /* Depth units per meter */
 
 #define ix ((int) plotX)
 #define iy ((int) plotY)
-          int iz = (int) plotZ;
+          int zindex = Z_MAP(z);
 
-          if (z >= Z_MIN && z < Z_MAX) {
+          /*
+          if (!(i&0x5f) && !(j & 0x5f)) {
+            printf("%d,%d:%f meters away. %f meters horizontally, %f vert",
+                i, j, d, dh, z);
+            printf("%d,%d:%d/%f %f meters ahead, %f meters to the side, %f meters tall.\n",
+                i, j, fdepths[j*SENSOR_WIDTH+i] & 0x7FF, d,
+                x, y, z);
+          }
+          */
+          /*
+          if (((i == 9) || (i == 160) || (i == 320) || (i == 480) || (i == 631)) &&
+              ((j == 9) || (j == 120) || (j == 240) || (j == 360) || (j == 470))) {
+            //  printf("%d,%d point is %f meters in front of camera, %f meters "
+            //         "to the side, and is %f meters above the camera. "
+            //         "ha: %f, va: %f\n",
+            //         j, i, y, x, z, ha, va);
+            printf("%d,%d: Z is %f, zindex is %d\n", j, i, z, zindex);
+          }
+          */
+
+          if (Z_DRAW(iz, z)) {
             while (ix >= 0 && ix < SCREEN_WIDTH &&
                 iy >= 0 && iy < SCREEN_HEIGHT) {
-              if (depths[iy*SCREEN_WIDTH+ix] < iz) {
-                depths[iy*SCREEN_WIDTH+ix] = iz;
+              if (DEPTH_AT(iy, ix) < zindex) {
+                DEPTH_AT(iy, ix) = zindex;
               }
               plotX += dx;
               plotY += dy;
@@ -248,21 +253,28 @@ kinect_init() {
       | ((i & 0xF0) << 8) // Green
       | ((i & 0xF00) >> 3) // Blue
       ;
-    /**/
+    */
     /* Blue shades: */
+    /*
     depthColors[i] =
           0xFF // blue
         | (0x010100 * ((2048-i)>>2));
-        /**/
+    */
     /*
     if (!(i&0x7F)) {
       printf("At height %d, color is %.6X\n", i, depthColors[i]);
     }
     */
   }
+
+  for (i = 0; i < 31; i++) {
+    colorMap[i] =
+          0xFF // blue
+        | (0x101000 * ((30-i)/2));
+    printf("Z_COLOR(%d) = %.6X\n", i, colorMap[i]);
+  }
+
   depthDistance[2047] = 0.0;
-  depthColors[2047] = 0;
-  depthColors[0] = 0xFFFFFF;
 
   /* Since depth is weirdly curved. */
   double angle;
