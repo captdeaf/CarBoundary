@@ -256,7 +256,7 @@ main(int argc, char *argv[]) {
 
   while (!sdl_pollevent()) {
     /* Sleep 1/10th of a second. */
-    usleep(30000);
+    // usleep(30000);
     kinect_poll();
     draw_depths();
   }
