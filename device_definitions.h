@@ -5,8 +5,8 @@
  */
 
 /* Pixels of height for SDL screen. */
-#define SCREEN_WIDTH 512
-#define SCREEN_HEIGHT 512
+#define SCREEN_WIDTH 600
+#define SCREEN_HEIGHT SCREEN_WIDTH
 
 /* Do we radially fill in everything after a pixel lands?
  * It's currently extremely CPU-intensive.
@@ -27,9 +27,9 @@
 /* This list _must_ end in a device id < 0. */
 /* <device id>, <baseX>, <baseY>, <baseZ>, <horiz angle>, <vert angle> */
 struct _kdevice_definition_ deviceDefinitions[] = {
-  // {0,  5.0, 5.0, 0.7874, 00.0, 0.0},
-  {0,  2.0, 5.0, 0.7874, 30.0, 0.0},
-  {0,  8.0, 5.0, 0.7874, -30.0, 0.0},
+  {0,  5.0, 5.0, 0.7874, 00.0, 0.0},
+  // {0,  2.0, 5.0, 0.7874, 30.0, 0.0},
+  // {0,  8.0, 5.0, 0.7874, -30.0, 0.0},
   {-1, 0.0, 0.0, 0.0,    0.0, 0.0},
 };
 
