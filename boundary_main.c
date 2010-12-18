@@ -92,9 +92,12 @@ poll_one_device(int device,
            * cartesian coordiantes. */
           /* Trig approach. Needs tweaking? */
           double dh = d * cos(DEG2RAD(va));
-          y = dh * cos(DEG2RAD(ha));
-          x = dh * sin(DEG2RAD(ha));
+          double dx = sin(DEG2RAD(ha));
+          double dy = cos(DEG2RAD(ha));
+          y = dh * dy;
+          x = dh * dx;
           z = d * sin(DEG2RAD(va));
+
           /* Approximation approach: Broken. */
           /*
           y = (i - 320) * (d - 10.0) * (640/480) * 0.0021;
@@ -126,18 +129,23 @@ poll_one_device(int device,
           z += baseZ;
 
           /* Now PLOT onto the depth chart! */
-          ix = (int) (x * (1024 / 10.0)); /* Pixels per meter */
-          iy = (int) (y * (1024 / 10.0)); /* Pixels per meter */
-          iz = (int) (z * (2048 / 2.0)); /* Depth units per meter */
+          double plotX = x * (1024 / 10.0); /* Pixels per meter */
+          double plotY = y * (1024 / 10.0); /* Pixels per meter */
+          double plotZ = z * (2048 / 2.0); /* Depth units per meter */
 
-          if (z < 1.5) {
-            if (ix >= 0 && ix < WIDTH &&
+#define ix ((int) plotX)
+#define iy ((int) plotY)
+#define iz ((int) plotZ)
+
+          if (z >= 0 && z < 1.5) {
+            while (ix >= 0 && ix < WIDTH &&
                 iy >= 0 && iy < HEIGHT) {
-              if (iz > 2048) iz = 2046;
               if (iz > 0 && iz < 2048) {
                 if (depths[iy*WIDTH+ix] < iz) {
                   depths[iy*WIDTH+ix] = iz;
                 }
+                plotX += dx;
+                plotY += dy;
               }
             }
           }
@@ -145,7 +153,7 @@ poll_one_device(int device,
       }
     }
   }
-  fillDepths(depths);
+  // fillDepths(depths);
 }
 
 void
