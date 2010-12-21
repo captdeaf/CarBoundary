@@ -20,6 +20,24 @@ struct _kdevice_definition_ {
 
 #include "device_definitions.h"
 
+/* CUBE_RATIO: Meters per side of a cube. */
+#define CUBE_RATIO 0.1
+/* CUBE_HEIGHT: # of cubes of height. Anything below get stuck to bottom,
+ * anything above gets ignored. */
+// 2 meters from bottom to top.
+#define CUBE_HEIGHT 20
+/* CUBE_WIDTH: # of cubes from left to right our environment is.
+ * 15 meters == 150 cubes. */
+#define CUBE_WIDTH 150
+/* CUBE_LENGTH: # of cubes from front to back.
+ * 20 meters == 150 cubes. */
+
+typedef struct _cube_ {
+  char known_by; // Which device knows this is here?
+  char cleared_by; // Which device has cleared this?
+  char guesscount; // How many devices have guessed this?
+} Cube;
+
 int depths[SCREEN_WIDTH * SCREEN_HEIGHT];
 #define DEPTH_AT(y, x) depths[y*SCREEN_WIDTH + x]
 double depthDistance[2048];
@@ -55,28 +73,6 @@ draw_depths() {
   SDL_UnlockSurface(render);
   SDL_BlitSurface(render,0,screen,0);
   SDL_Flip(screen);
-}
-
-void
-fillDepths(int depths[]) {
-  int i,j;
-  int ci, cj;
-  int x;
-  ci = SCREEN_WIDTH / 2;
-  cj = SCREEN_HEIGHT / 2;
-  // double di, dj;
-  // double ni, nj;
-  int nd;
-  for (j = cj+5; j < SCREEN_HEIGHT; j++) {
-    for (i = 0; i < SCREEN_WIDTH; i++) {
-      x = j*SCREEN_WIDTH+i;
-      nd = depths[x];
-      if (nd < depths[x-SCREEN_WIDTH]) {
-        nd = depths[x-SCREEN_WIDTH];
-      }
-      depths[x] = nd;
-    }
-  }
 }
 
 #define PI 3.141592654
@@ -124,7 +120,7 @@ poll_one_device(KDevice *dev) {
                                dev->device,
                                FREENECT_DEPTH_11BIT)) {
     // printf("\n\n\n");
-    for (j = 0; j < SENSOR_HEIGHT; j++) {
+    for (j = SENSOR_HEIGHT - 1; j >= 0; j--) {
       va = dev->vangle[j];
       for (i = 0; i < SENSOR_WIDTH; i++) {
         d = depthDistance[fdepths[j*SENSOR_WIDTH+i] & 0x7FF];
@@ -188,7 +184,7 @@ poll_one_device(KDevice *dev) {
           if (Z_DRAW(iz, z)) {
             while (ix >= 0 && ix < SCREEN_WIDTH &&
                 iy >= 0 && iy < SCREEN_HEIGHT) {
-              if (DEPTH_AT(iy, ix) < zindex) {
+              if (HAS_PRIORITY(DEPTH_AT(iy, ix),zindex)) {
                 DEPTH_AT(iy, ix) = zindex;
               }
               plotX += dx;
@@ -203,7 +199,6 @@ poll_one_device(KDevice *dev) {
       }
     }
   }
-  // fillDepths(depths);
 }
 
 void
@@ -271,7 +266,7 @@ kinect_init() {
     colorMap[i] =
           0xFF // blue
         | (0x101000 * ((30-i)/2));
-    printf("Z_COLOR(%d) = %.6X\n", i, colorMap[i]);
+    // printf("Z_COLOR(%d) = %.6X\n", i, colorMap[i]);
   }
 
   depthDistance[2047] = 0.0;

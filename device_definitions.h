@@ -5,7 +5,7 @@
  */
 
 /* Pixels of height for SDL screen. */
-#define SCREEN_WIDTH 600
+#define SCREEN_WIDTH 512
 #define SCREEN_HEIGHT SCREEN_WIDTH
 
 /* Do we radially fill in everything after a pixel lands?
@@ -14,8 +14,8 @@
 #define DOFILL 1
 
 /* Scale of pixels per meter.
- * This ensures that the display, whatever it is, is 10 meters tall. */
-#define SCREEN_SCALE (SCREEN_HEIGHT / 10.0)
+ * This ensures that the display, whatever it is, is 15 meters tall. */
+#define SCREEN_SCALE (SCREEN_HEIGHT / 15.0)
 
 /* Converts a height-in-meters to an integer representation, which is
  * used by the color generator.
@@ -32,7 +32,7 @@
 
 /* Priority of height. This is currently only used to determine if a ceiling
  * is being drawn. */
-#define HASPRIORITY(oldz, newz) (newz > oldz)
+#define HAS_PRIORITY(oldz, newz) (1)
 // #define HASPRIORITY(oldz, newz) ((newz > 20) ? (oldz == 0) : (newz > oldz))
 
 /* Minimum and maximum Z to be plotted, in meters.
@@ -42,7 +42,7 @@
  * Z_MIN will only be useful when we figure out how to display potholes :D.
  */
 #define Z_MIN 0.0
-#define Z_MAX 2.0
+#define Z_MAX 1.6
 
 /* do we draw something? Takes both a z index and a map height. */
 #define Z_DRAW(z, height) ((Z_MIN < height) && (Z_MAX >= height))
@@ -50,8 +50,8 @@
 /* This list _must_ end in a device id < 0. */
 /* <device id>, <baseX>, <baseY>, <baseZ>, <horiz angle>, <vert angle> */
 struct _kdevice_definition_ deviceDefinitions[] = {
-  {0,  5.0, 5.0, 0.7874, 00.0, 0.0},
-  // {0,  2.0, 5.0, 0.7874, 30.0, 0.0},
+  {0,  6.0, 9.0, 0.7874, 0.0, 0.0},
+  {0,  10.0, 9.0, 0.7874, 0.0, 0.0},
   // {0,  8.0, 5.0, 0.7874, -30.0, 0.0},
   {-1, 0.0, 0.0, 0.0,    0.0, 0.0},
 };
