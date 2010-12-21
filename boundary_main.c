@@ -20,35 +20,48 @@ struct _kdevice_definition_ {
 
 #include "device_definitions.h"
 
-/* CUBE_RATIO: Meters per side of a cube. */
-#define CUBE_RATIO 0.1
-/* CUBE_HEIGHT: # of cubes of height. Anything below get stuck to bottom,
- * anything above gets ignored. */
-// 2 meters from bottom to top.
-#define CUBE_HEIGHT 20
-/* CUBE_WIDTH: # of cubes from left to right our environment is.
- * 15 meters == 150 cubes. */
-#define CUBE_WIDTH 150
-/* CUBE_LENGTH: # of cubes from front to back.
- * 20 meters == 150 cubes. */
-
-typedef struct _cube_ {
-  char known_by; // Which device knows this is here?
-  char cleared_by; // Which device has cleared this?
-  char guesscount; // How many devices have guessed this?
-} Cube;
-
-int depths[SCREEN_WIDTH * SCREEN_HEIGHT];
-#define DEPTH_AT(y, x) depths[y*SCREEN_WIDTH + x]
 double depthDistance[2048];
 double horizDepthMultiplier[SENSOR_WIDTH];
 double vertDepthMultiplier[SENSOR_HEIGHT];
 
-/* Color map */
-int colorMap[31];
+/* CUBE_SCALE: Cubes per meter. */
+#define CUBE_SCALE 30.0
+/* CUBE_HEIGHT: # of cubes of height. Anything below get stuck to bottom,
+ * anything above gets ignored. */
+// 2 meters from bottom to top.
+#define CUBE_HEIGHT 60
+/* CUBE_WIDTH: # of cubes from left to right our environment is.
+ * 15 meters == 150 cubes. */
+#define CUBE_WIDTH 300
+/* CUBE_LENGTH: # of cubes from front to back.
+ * 20 meters == 200 cubes. */
+#define CUBE_LENGTH 300
+
+#define MIN_COUNT 3
+typedef struct _cube_ {
+  char known_by; // Which device knows this is here?
+  char cleared_by; // Which device has cleared this?
+  char guess_count; // How many devices have guessed this?
+  char known_count; // How many devices have guessed this?
+} Cube;
+
+Cube environmentCubes[CUBE_HEIGHT*CUBE_LENGTH*CUBE_WIDTH];
+#define CUBELOC(x,y,z) ((z*CUBE_WIDTH*CUBE_LENGTH)+(y*CUBE_WIDTH)+x)
+#define CUBEAT(loc) environmentCubes[loc]
+#define CUBE(x,y,z) environmentCubes[CUBELOC(x,y,z)]
+
+#define COL_CLEAR '\0'
+#define COL_KNOWN 'k'
+#define COL_GUESSED 'g'
+char columnStatus[CUBE_LENGTH*CUBE_WIDTH];
+#define COLSTAT(x,y) columnStatus[y*CUBE_WIDTH + x]
+
+/* Color map. This is the color of the cube given. */
+int cubeColor[20];
 
 typedef struct _kdevice_ {
   int device;
+  char id;
   double vangle[SENSOR_HEIGHT];
   double hangle[SENSOR_WIDTH];
   double dvv[SENSOR_HEIGHT];
@@ -63,11 +76,49 @@ int numDevices;
 
 void
 draw_depths() {
-  int x,y;
+  int x,y,z;
+  int sx, sy;
+  int zmax;
+  int loc;
   SDL_LockSurface(render);
-  for (y = 0; y < SCREEN_HEIGHT; y++) {
-    for (x = 0; x < SCREEN_WIDTH; x++) {
-      setPixel(x, y, Z_COLOR(DEPTH_AT(y,x)));
+  for (sx = 0; sx < SCREEN_WIDTH; sx++) {
+    x = (int) (((double) sx / (double) SCREEN_WIDTH) * (double) CUBE_WIDTH);
+    for (sy = 0; sy < SCREEN_HEIGHT; sy++) {
+      y = (int) (((double) sy / (double) SCREEN_HEIGHT) * (double) CUBE_LENGTH);
+  /*
+  for (y = 0; y < CUBE_LENGTH; y++) { sy = y;
+    for (x = 0; x < CUBE_WIDTH; x++) { sx = x;
+  */
+      if (COLSTAT(x,y) == COL_KNOWN) {
+        zmax = -1;
+        for (z = 0; z < CUBE_HEIGHT; z++) {
+          loc = CUBELOC(x, y, z);
+          if ((CUBEAT(loc).known_count >= MIN_COUNT) ||
+              ((CUBEAT(loc).guess_count >= MIN_COUNT) &&
+               !CUBEAT(loc).cleared_by)) {
+            zmax = z;
+          }
+        }
+        if (zmax >= 0 && zmax < CUBE_HEIGHT) {
+          setPixel(sx, sy, cubeColor[zmax]);
+        }
+      } else if (COLSTAT(x,y) == COL_GUESSED) {
+        zmax = -1;
+        for (z = 0; z < CUBE_HEIGHT; z++) {
+          loc = CUBELOC(x, y, z);
+          if ((CUBEAT(loc).known_count >= MIN_COUNT) ||
+              ((CUBEAT(loc).guess_count >= MIN_COUNT) &&
+               !CUBEAT(loc).cleared_by)) {
+            zmax = z;
+          }
+        }
+        if (zmax >= 0 && zmax < CUBE_HEIGHT) {
+          setPixel(sx, sy, cubeColor[zmax]);
+        }
+      } else {
+        /* If it's non-existant, set the pixel cleanly. */
+        setPixel(sx, sy, 0xFFFFCC);
+      }
     }
   }
   SDL_UnlockSurface(render);
@@ -83,6 +134,7 @@ init_one_device(KDevice *dev, int device,
                 double hangle, double vangle) {
   int i;
   dev->device = device;
+  dev->id = '0' + device; /* quick and dirty 'id' for known_by. */
   dev->baseX = baseX;
   dev->baseY = baseY;
   dev->baseZ = baseZ;
@@ -113,7 +165,7 @@ poll_one_device(KDevice *dev) {
   uint16_t *fdepths;
   uint32_t timestamp;
   double d;
-  double x, y, z;
+  double landX, landY, landZ;
   double ha, va;
   if (!freenect_sync_get_depth((void **) &fdepths,
                                &timestamp,
@@ -121,8 +173,10 @@ poll_one_device(KDevice *dev) {
                                FREENECT_DEPTH_11BIT)) {
     // printf("\n\n\n");
     for (j = SENSOR_HEIGHT - 1; j >= 0; j--) {
+    // for (j = SENSOR_HEIGHT/2 ; j ; j = 0) {
       va = dev->vangle[j];
       for (i = 0; i < SENSOR_WIDTH; i++) {
+      // for (i = SENSOR_WIDTH / 2 ; i ; i = 0) {
         d = depthDistance[fdepths[j*SENSOR_WIDTH+i] & 0x7FF];
         d *= horizDepthMultiplier[i];
         // d *= vertDepthMultiplier[j];
@@ -136,9 +190,10 @@ poll_one_device(KDevice *dev) {
           double dh = d * dev->dvh[j];
           double dx = dev->dx[i];
           double dy = dev->dy[i];
-          y = dh * dy;
-          x = dh * dx;
-          z = d * dev->dvv[j];
+          double dz = dev->dvv[j];
+          landY = dh * dy;
+          landX = dh * dx;
+          landZ = d * dz;
 
           /* Approximation approach: Broken. */
           /*
@@ -149,17 +204,9 @@ poll_one_device(KDevice *dev) {
 
           /* Measurements are relative to the camera's position. Now adjust
            * for the base position. */
-          x += dev->baseX;
-          y += dev->baseY;
-          z += dev->baseZ;
-
-          /* Now PLOT onto the depth chart! */
-          double plotX = x * SCREEN_SCALE;
-          double plotY = y * SCREEN_SCALE;
-
-#define ix ((int) plotX)
-#define iy ((int) plotY)
-          int zindex = Z_MAP(z);
+          landX += dev->baseX;
+          landY += dev->baseY;
+          landZ += dev->baseZ;
 
           /*
           if (!(i&0x5f) && !(j & 0x5f)) {
@@ -181,19 +228,72 @@ poll_one_device(KDevice *dev) {
           }
           */
 
-          if (Z_DRAW(iz, z)) {
-            while (ix >= 0 && ix < SCREEN_WIDTH &&
-                iy >= 0 && iy < SCREEN_HEIGHT) {
-              if (HAS_PRIORITY(DEPTH_AT(iy, ix),zindex)) {
-                DEPTH_AT(iy, ix) = zindex;
-              }
-              plotX += dx;
-              plotY += dy;
-#if DOFILL
-#else
-              break;
-#endif
+          /* Current x/y/z. */
+          double cx = dev->baseX;
+          double cy = dev->baseY;
+          double cz = dev->baseZ;
+
+          // Plot everything onto the cube scale.
+          landX *= CUBE_SCALE;
+          landY *= CUBE_SCALE;
+          landZ *= CUBE_SCALE;
+
+          cx *= CUBE_SCALE;
+          cy *= CUBE_SCALE;
+          cz *= CUBE_SCALE;
+
+          int xt = cx <= landX;
+          int yt = cy <= landY;
+
+          // ix, iy and iz are cube coordinates of cx,cy,cz
+#define ix ((int) cx)
+#define iy ((int) cy)
+#define iz ((cz < 0) ? 0 : (cz > CUBE_HEIGHT) ? (CUBE_HEIGHT-1) : (int) cz)
+
+#define INBOUNDS(x,y,z) ( \
+                 (x < CUBE_WIDTH) && \
+                 (y < CUBE_LENGTH) && \
+                 (x >= 0.0) && \
+                 (y >= 0.0) && \
+                 (z >= 0.0) && \
+                 (z <= CUBE_HEIGHT))
+          // printf("LandX,y,z: %d,%d,%d\n", (int) landX, (int) landY, (int) landZ);
+          /* Step 1: Mark all items between basex/y/z and landing x/y/z. */
+          while ((((cx <= landX) == xt) &&
+                 ((cy <= landY) == yt)) &&
+                 INBOUNDS(cx,cy,cz)) {
+            // printf("cx <= landX: %d (xt: %d)\n", cx <= landX, xt);
+            // printf("cy <= landY: %d (yt: %d)\n", cy <= landY, yt);
+            // printf("Clearing x,y,z: %d,%d,%d\n", ix, iy, iz);
+            CUBE(ix, iy, iz).cleared_by = dev->id;
+            /* Advance to next cube. */
+            cx += dx; cy += dy; cz += dz;
+          }
+
+          if (INBOUNDS(cx, cy, cz)) {
+            /* Step 2: Mark the cube this lands in as known, as well as its
+             * column status. */
+            // printf("Knowing x,y,z: %d,%d,%d\n", ix, iy, iz);
+            CUBE((int) landX, (int) landY, iz).known_by = dev->id;
+            COLSTAT(ix, iy) = COL_KNOWN;
+            CUBE(ix, iy, iz).known_count++;
+          } else {
+            // printf("Landed out of bounds?\n");
+          }
+
+          /* Advance to next cube. */
+          cx += dx; cy += dy; cz += dz;
+
+          /* Step 3: Mark every cube in a line _after_ known cube as 'guessed'
+           */
+          while (INBOUNDS(cx, cy, cz)) {
+            // printf("Guessing x,y,z: %d,%d,%d\n", ix, iy, iz);
+            CUBE(ix, iy, iz).guess_count++;
+            /* Advance to next cube. */
+            if (COLSTAT(ix, iy) == COL_CLEAR) {
+              COLSTAT(ix, iy) = COL_GUESSED;
             }
+            cx += dx; cy += dy; cz += dz;
           }
         }
       }
@@ -204,7 +304,8 @@ poll_one_device(KDevice *dev) {
 void
 kinect_poll() {
   /* Clear depth map out */
-  memset(depths, 0, sizeof(depths));
+  memset(environmentCubes, 0, sizeof(environmentCubes));
+  memset(columnStatus, 0, sizeof(columnStatus));
   /*
     poll_one_device(int device,
                     double baseX, double baseY, double baseZ,
@@ -262,11 +363,11 @@ kinect_init() {
     */
   }
 
-  for (i = 0; i < 31; i++) {
-    colorMap[i] =
+  for (i = 0; i < CUBE_HEIGHT; i++) {
+    cubeColor[i] =
           0xFF // blue
-        | (0x101000 * ((30-i)/2));
-    // printf("Z_COLOR(%d) = %.6X\n", i, colorMap[i]);
+        | ((0x0101 * ((256 * (CUBE_HEIGHT - i)) / CUBE_HEIGHT)) << 8);
+    // printf("Z_COLOR(%d) = %.6X\n", i, cubeColor[i]);
   }
 
   depthDistance[2047] = 0.0;
