@@ -72,7 +72,7 @@ draw_depths() {
     for (sy = 0; sy < SCREEN_HEIGHT; sy++) {
       y = (int) (((double) sy / (double) SCREEN_HEIGHT) * (double) CUBE_LENGTH);
       if (x < CAR_CUBE_LEFT || x > CAR_CUBE_RIGHT ||
-          y < CAR_CUBE_BOTTOM || y > CAR_CUBE_TOP) {
+          y < CAR_CUBE_REAR || y > CAR_CUBE_FRONT) {
         if (COLSTAT(x,y) == COL_KNOWN) {
           zmax = -1;
           for (z = 0; z < CUBE_HEIGHT; z++) {
@@ -170,7 +170,7 @@ poll_one_device(KDevice *dev) {
       // for (i = SENSOR_WIDTH / 2 ; i ; i = 0) {
         d = depthDistance[fdepths[j*SENSOR_WIDTH+i] & 0x7FF];
         d *= horizDepthMultiplier[i];
-        // d *= vertDepthMultiplier[j];
+        d *= vertDepthMultiplier[j];
         /* It's not worth plotting if it's too far away or too close. */
         if (d > 0.1 && d < 30.0) {
           ha = dev->hangle[i];
@@ -272,7 +272,7 @@ poll_one_device(KDevice *dev) {
             COLSTAT(ix, iy) = COL_KNOWN;
             CUBE(ix, iy, iz).known_count++;
             CUBE(ix, iy, iz).known_by = dev->id;
-          } else {
+          // } else {
             // printf("Landed out of bounds?\n");
           }
 
