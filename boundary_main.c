@@ -24,20 +24,6 @@ double depthDistance[2048];
 double horizDepthMultiplier[SENSOR_WIDTH];
 double vertDepthMultiplier[SENSOR_HEIGHT];
 
-/* CUBE_SCALE: Cubes per meter. */
-#define CUBE_SCALE 30.0
-/* CUBE_HEIGHT: # of cubes of height. Anything below get stuck to bottom,
- * anything above gets ignored. */
-// 2 meters from bottom to top.
-#define CUBE_HEIGHT 60
-/* CUBE_WIDTH: # of cubes from left to right our environment is.
- * 15 meters == 150 cubes. */
-#define CUBE_WIDTH 300
-/* CUBE_LENGTH: # of cubes from front to back.
- * 20 meters == 200 cubes. */
-#define CUBE_LENGTH 300
-
-#define MIN_COUNT 3
 typedef struct _cube_ {
   char known_by; // Which device knows this is here?
   char cleared_by; // Which device has cleared this?
@@ -85,39 +71,40 @@ draw_depths() {
     x = (int) (((double) sx / (double) SCREEN_WIDTH) * (double) CUBE_WIDTH);
     for (sy = 0; sy < SCREEN_HEIGHT; sy++) {
       y = (int) (((double) sy / (double) SCREEN_HEIGHT) * (double) CUBE_LENGTH);
-  /*
-  for (y = 0; y < CUBE_LENGTH; y++) { sy = y;
-    for (x = 0; x < CUBE_WIDTH; x++) { sx = x;
-  */
-      if (COLSTAT(x,y) == COL_KNOWN) {
-        zmax = -1;
-        for (z = 0; z < CUBE_HEIGHT; z++) {
-          loc = CUBELOC(x, y, z);
-          if ((CUBEAT(loc).known_count >= MIN_COUNT) ||
-              ((CUBEAT(loc).guess_count >= MIN_COUNT) &&
-               !CUBEAT(loc).cleared_by)) {
-            zmax = z;
+      if (x < CAR_CUBE_LEFT || x > CAR_CUBE_RIGHT ||
+          y < CAR_CUBE_BOTTOM || y > CAR_CUBE_TOP) {
+        if (COLSTAT(x,y) == COL_KNOWN) {
+          zmax = -1;
+          for (z = 0; z < CUBE_HEIGHT; z++) {
+            loc = CUBELOC(x, y, z);
+            if ((CUBEAT(loc).known_count >= MIN_COUNT) ||
+                ((CUBEAT(loc).guess_count >= MIN_COUNT) &&
+                 !CUBEAT(loc).cleared_by)) {
+              zmax = z;
+            }
           }
-        }
-        if (zmax >= 0 && zmax < CUBE_HEIGHT) {
-          setPixel(sx, sy, cubeColor[zmax]);
-        }
-      } else if (COLSTAT(x,y) == COL_GUESSED) {
-        zmax = -1;
-        for (z = 0; z < CUBE_HEIGHT; z++) {
-          loc = CUBELOC(x, y, z);
-          if ((CUBEAT(loc).known_count >= MIN_COUNT) ||
-              ((CUBEAT(loc).guess_count >= MIN_COUNT) &&
-               !CUBEAT(loc).cleared_by)) {
-            zmax = z;
+          if (zmax >= 0 && zmax < CUBE_HEIGHT) {
+            setPixel(sx, sy, cubeColor[zmax]);
           }
-        }
-        if (zmax >= 0 && zmax < CUBE_HEIGHT) {
-          setPixel(sx, sy, cubeColor[zmax]);
+        } else if (COLSTAT(x,y) == COL_GUESSED) {
+          zmax = -1;
+          for (z = 0; z < CUBE_HEIGHT; z++) {
+            loc = CUBELOC(x, y, z);
+            if ((CUBEAT(loc).known_count >= MIN_COUNT) ||
+                ((CUBEAT(loc).guess_count >= MIN_COUNT) &&
+                 !CUBEAT(loc).cleared_by)) {
+              zmax = z;
+            }
+          }
+          if (zmax >= 0 && zmax < CUBE_HEIGHT) {
+            setPixel(sx, sy, cubeColor[zmax]);
+          }
+        } else {
+          /* If it's non-existant, set the pixel cleanly. */
+          setPixel(sx, sy, 0xFFFFCC);
         }
       } else {
-        /* If it's non-existant, set the pixel cleanly. */
-        setPixel(sx, sy, 0xFFFFCC);
+        setPixel(sx, sy, 0x006600);
       }
     }
   }
@@ -234,13 +221,13 @@ poll_one_device(KDevice *dev) {
           double cz = dev->baseZ;
 
           // Plot everything onto the cube scale.
-          landX *= CUBE_SCALE;
-          landY *= CUBE_SCALE;
-          landZ *= CUBE_SCALE;
+          landX *= CUBE_XSCALE;
+          landY *= CUBE_YSCALE;
+          landZ *= CUBE_ZSCALE;
 
-          cx *= CUBE_SCALE;
-          cy *= CUBE_SCALE;
-          cz *= CUBE_SCALE;
+          cx *= CUBE_XSCALE;
+          cy *= CUBE_YSCALE;
+          cz *= CUBE_ZSCALE;
 
           int xt = cx <= landX;
           int yt = cy <= landY;
