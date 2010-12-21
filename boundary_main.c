@@ -85,6 +85,8 @@ draw_depths() {
           }
           if (zmax >= 0 && zmax < CUBE_HEIGHT) {
             setPixel(sx, sy, cubeColor[zmax]);
+          } else {
+            setPixel(sx, sy, NULL_COLOR);
           }
         } else if (COLSTAT(x,y) == COL_GUESSED) {
           zmax = -1;
@@ -98,10 +100,12 @@ draw_depths() {
           }
           if (zmax >= 0 && zmax < CUBE_HEIGHT) {
             setPixel(sx, sy, cubeColor[zmax]);
+          } else {
+            setPixel(sx, sy, NULL_COLOR);
           }
         } else {
           /* If it's non-existant, set the pixel cleanly. */
-          setPixel(sx, sy, 0xFFFFCC);
+          setPixel(sx, sy, NULL_COLOR);
         }
       } else {
         setPixel(sx, sy, 0x006600);
@@ -261,9 +265,13 @@ poll_one_device(KDevice *dev) {
             /* Step 2: Mark the cube this lands in as known, as well as its
              * column status. */
             // printf("Knowing x,y,z: %d,%d,%d\n", ix, iy, iz);
-            CUBE((int) landX, (int) landY, iz).known_by = dev->id;
+            cx = landX;
+            cy = landY;
+            cz = landZ;
+            CUBE(ix, iy, iz).known_by = dev->id;
             COLSTAT(ix, iy) = COL_KNOWN;
             CUBE(ix, iy, iz).known_count++;
+            CUBE(ix, iy, iz).known_by = dev->id;
           } else {
             // printf("Landed out of bounds?\n");
           }
