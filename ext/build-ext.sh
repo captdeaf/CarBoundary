@@ -15,7 +15,8 @@ mv config.h config.h.old
 sed /LOGGING/d config.h.old > config.h
 echo "Building libusb . . ."
 make >&/dev/null || die "unable to compile libusb: make"
-if `!ls -1 libusb-1.0` ; then
+# We need to use ls -1 instead of [ -f ] because [ -f ] fails on symlinks.
+if ! `ls -1 libusb-1.0` ; then
   ln -s libusb libusb-1.0
 fi >&/dev/null
 
