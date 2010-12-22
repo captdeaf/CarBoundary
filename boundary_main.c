@@ -9,20 +9,11 @@
 #include <math.h>
 #include "boundary_sdl.h"
 
-struct _kdevice_definition_ {
-  int device;
-  double baseX;
-  double baseY;
-  double baseZ;
-  double hangle;
-  double vangle;
-};
-
 #include "device_definitions.h"
 
-double depthDistance[2048];
-double horizDepthMultiplier[SENSOR_WIDTH];
-double vertDepthMultiplier[SENSOR_HEIGHT];
+FP_TYPE depthDistance[2048];
+FP_TYPE horizDepthMultiplier[SENSOR_WIDTH];
+FP_TYPE vertDepthMultiplier[SENSOR_HEIGHT];
 
 typedef struct _cube_ {
   char known_by; // Which device knows this is here?
@@ -48,13 +39,13 @@ int cubeColor[20];
 typedef struct _kdevice_ {
   int device;
   char id;
-  double vangle[SENSOR_HEIGHT];
-  double hangle[SENSOR_WIDTH];
-  double dvv[SENSOR_HEIGHT];
-  double dvh[SENSOR_HEIGHT];
-  double dx[SENSOR_WIDTH];
-  double dy[SENSOR_WIDTH];
-  double baseX, baseY, baseZ;
+  FP_TYPE vangle[SENSOR_HEIGHT];
+  FP_TYPE hangle[SENSOR_WIDTH];
+  FP_TYPE dvv[SENSOR_HEIGHT];
+  FP_TYPE dvh[SENSOR_HEIGHT];
+  FP_TYPE dx[SENSOR_WIDTH];
+  FP_TYPE dy[SENSOR_WIDTH];
+  FP_TYPE baseX, baseY, baseZ;
 } KDevice;
 
 KDevice *devices;
@@ -68,9 +59,9 @@ draw_depths() {
   int loc;
   SDL_LockSurface(render);
   for (sx = 0; sx < SCREEN_WIDTH; sx++) {
-    x = (int) (((double) sx / (double) SCREEN_WIDTH) * (double) CUBE_WIDTH);
+    x = (int) (((FP_TYPE) sx / (FP_TYPE) SCREEN_WIDTH) * (FP_TYPE) CUBE_WIDTH);
     for (sy = 0; sy < SCREEN_HEIGHT; sy++) {
-      y = (int) (((double) sy / (double) SCREEN_HEIGHT) * (double) CUBE_LENGTH);
+      y = (int) (((FP_TYPE) sy / (FP_TYPE) SCREEN_HEIGHT) * (FP_TYPE) CUBE_LENGTH);
       if (x < CAR_CUBE_LEFT || x > CAR_CUBE_RIGHT ||
           y < CAR_CUBE_REAR || y > CAR_CUBE_FRONT) {
         if (COLSTAT(x,y) == COL_KNOWN) {
@@ -121,8 +112,8 @@ draw_depths() {
 #define DEG2RAD(x) (x * (PI / 180.0))
 void
 init_one_device(KDevice *dev, int device,
-                double baseX, double baseY, double baseZ,
-                double hangle, double vangle) {
+                FP_TYPE baseX, FP_TYPE baseY, FP_TYPE baseZ,
+                FP_TYPE hangle, FP_TYPE vangle) {
   int i;
   dev->device = device;
   dev->id = '0' + device; /* quick and dirty 'id' for known_by. */
@@ -132,13 +123,13 @@ init_one_device(KDevice *dev, int device,
 
   for (i = 0; i < SENSOR_WIDTH; i++) {
     dev->hangle[i] = hangle + (HANGLE * (i / SENSOR_WIDTH_D)) - (HANGLE/2);
-    dev->dx[i] = sin(DEG2RAD(dev->hangle[i]));
-    dev->dy[i] = cos(DEG2RAD(dev->hangle[i]));
+    dev->dx[i] = FP_SIN(DEG2RAD(dev->hangle[i]));
+    dev->dy[i] = FP_COS(DEG2RAD(dev->hangle[i]));
   }
   for (i = 0; i < SENSOR_HEIGHT; i++) {
     dev->vangle[i] = vangle - (VANGLE * (i / SENSOR_HEIGHT_D)) + (VANGLE/2);
-    dev->dvv[i] = sin(DEG2RAD(dev->vangle[i]));
-    dev->dvh[i] = cos(DEG2RAD(dev->vangle[i]));
+    dev->dvv[i] = FP_SIN(DEG2RAD(dev->vangle[i]));
+    dev->dvh[i] = FP_COS(DEG2RAD(dev->vangle[i]));
   }
 }
 /**
@@ -155,9 +146,9 @@ poll_one_device(KDevice *dev) {
   int i,j;
   uint16_t *fdepths;
   uint32_t timestamp;
-  double d;
-  double landX, landY, landZ;
-  double ha, va;
+  FP_TYPE d;
+  FP_TYPE landX, landY, landZ;
+  FP_TYPE ha, va;
   if (!freenect_sync_get_depth((void **) &fdepths,
                                &timestamp,
                                dev->device,
@@ -178,10 +169,10 @@ poll_one_device(KDevice *dev) {
           /* We have spherical coordinates, and now we need to convert that to
            * cartesian coordiantes. */
           /* Trig approach. Needs tweaking? */
-          double dh = d * dev->dvh[j];
-          double dx = dev->dx[i];
-          double dy = dev->dy[i];
-          double dz = dev->dvv[j];
+          FP_TYPE dh = d * dev->dvh[j];
+          FP_TYPE dx = dev->dx[i];
+          FP_TYPE dy = dev->dy[i];
+          FP_TYPE dz = dev->dvv[j];
           landY = dh * dy;
           landX = dh * dx;
           landZ = d * dz;
@@ -220,9 +211,9 @@ poll_one_device(KDevice *dev) {
           */
 
           /* Current x/y/z. */
-          double cx = dev->baseX;
-          double cy = dev->baseY;
-          double cz = dev->baseZ;
+          FP_TYPE cx = dev->baseX;
+          FP_TYPE cy = dev->baseY;
+          FP_TYPE cz = dev->baseZ;
 
           // Plot everything onto the cube scale.
           landX *= CUBE_XSCALE;
@@ -243,11 +234,11 @@ poll_one_device(KDevice *dev) {
 
 #define INBOUNDS(x,y,z) ( \
                  (x < CUBE_WIDTH) && \
-                 (y < CUBE_LENGTH) && \
                  (x >= 0.0) && \
+                 (y < CUBE_LENGTH) && \
                  (y >= 0.0) && \
-                 (z >= 0.0) && \
-                 (z <= CUBE_HEIGHT))
+                 (z < CUBE_HEIGHT) && \
+                 (z >= 0.0))
           // printf("LandX,y,z: %d,%d,%d\n", (int) landX, (int) landY, (int) landZ);
           /* Step 1: Mark all items between basex/y/z and landing x/y/z. */
           while ((((cx <= landX) == xt) &&
@@ -303,8 +294,8 @@ kinect_poll() {
   memset(columnStatus, 0, sizeof(columnStatus));
   /*
     poll_one_device(int device,
-                    double baseX, double baseY, double baseZ,
-                    double hangle, double vangle);
+                    FP_TYPE baseX, FP_TYPE baseY, FP_TYPE baseZ,
+                    FP_TYPE hangle, FP_TYPE vangle);
   */
   /* For each device we have, plot its detected collisions. */
 
@@ -324,14 +315,14 @@ kinect_poll() {
 int
 kinect_init() {
   int i;
-  const double k1 = 0.1236;
-  const double k2 = 2842.5;
-  const double k3 = 1.1863;
-  const double k4 = 0.0370;
+  const FP_TYPE k1 = 0.1236;
+  const FP_TYPE k2 = 2842.5;
+  const FP_TYPE k3 = 1.1863;
+  const FP_TYPE k4 = 0.0370;
 
   /* Populate depthDistance[i], in meters. */
   for (i = 1; i < 2047; i++) {
-    depthDistance[i] = k1 * tan((i/k2) + k3) - k4;
+    depthDistance[i] = k1 * FP_TAN((i/k2) + k3) - k4;
     /* Colors; Red for bits 0-4, green for bits 5-8, blue for 9-11 */
     /*
     if (!(i&0x7F)) {
@@ -368,10 +359,10 @@ kinect_init() {
   depthDistance[2047] = 0.0;
 
   /* Since depth is weirdly curved. */
-  double angle;
+  FP_TYPE angle;
   for (i = 0; i < SENSOR_WIDTH; i++) {
     angle = (HANGLE * (i / SENSOR_WIDTH_D)) - (HANGLE/2);
-    horizDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
+    horizDepthMultiplier[i] = 1.0 / FP_COS(DEG2RAD(angle));
     /*
     if (!(i&63)) {
       printf("HorizDepthMultiplier[%d] = %f\n", i, horizDepthMultiplier[i]);
@@ -380,7 +371,7 @@ kinect_init() {
   }
   for (i = 0; i < SENSOR_HEIGHT; i++) {
     angle = (VANGLE * (i / SENSOR_HEIGHT_D)) - (VANGLE/2);
-    vertDepthMultiplier[i] = 1.0 / cos(DEG2RAD(angle));
+    vertDepthMultiplier[i] = 1.0 / FP_COS(DEG2RAD(angle));
     /*
     if (!(i&63)) {
       printf("VertDepthMultiplier[%d] = %f\n", i, vertDepthMultiplier[i]);

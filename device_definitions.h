@@ -5,8 +5,8 @@
  */
 
 /* Pixels of height for SDL screen. */
-#define SCREEN_WIDTH 640
-#define SCREEN_HEIGHT 800
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 400
 
 /* Size of environment scanner in meters. */
 /* 15 meters from front to back, 10 from left to right. 2 meters top-bottom */
@@ -24,14 +24,27 @@
 #define TABLE_TOP 0.7874
 #define BOX_TOP 0.4318
 
+#define FP_TYPE double
+#define FP_COS cos
+#define FP_SIN sin
+#define FP_TAN tan
+
+struct _kdevice_definition_ {
+  int device;
+  FP_TYPE baseX;
+  FP_TYPE baseY;
+  FP_TYPE baseZ;
+  FP_TYPE hangle;
+  FP_TYPE vangle;
+};
 /* This list _must_ end in a device id < 0. */
 /* <device id>, <baseX>, <baseY>, <baseZ>, <horiz angle>, <vert angle> */
 struct _kdevice_definition_ deviceDefinitions[] = {
   // One, on a box, pointing straight ahead.
   // {0,  6.0, CAR_FRONT, BOX_TOP, 0.0, 0.0},
   // Two, on boxes, pointing straight ahead.
-  {0,  5.25, CAR_FRONT, BOX_TOP, 0.0, 0.0},
-  // {1,  6.75, CAR_FRONT, BOX_TOP, 0.0, 0.0},
+  {1,  5.25, CAR_FRONT, BOX_TOP, 0.0, 0.0},
+  {0,  6.75, CAR_FRONT, BOX_TOP, 0.0, 0.0},
   // Default: One, on table top.
   // {0,  6.0, CAR_FRONT, TABLE_TOP, 0.0, 0.0},
   // Two, pointing straight ahead.
@@ -64,7 +77,7 @@ struct _kdevice_definition_ deviceDefinitions[] = {
 /* CUBE_SCALE: Cubes per meter. */
 #define CUBE_XSCALE 30
 #define CUBE_YSCALE 30
-#define CUBE_ZSCALE 30
+#define CUBE_ZSCALE 10
 
 /* CUBE_HEIGHT: # of cubes of height. Anything below get stuck to bottom,
  * anything above gets ignored. */
