@@ -1,0 +1,50 @@
+CarBoundary is a C project built on top of two (or more) Kinects in order
+to build a top-down view of the objects surrounding the car.
+
+More details at:
+
+  http://www.carbonatedblog.com/2011/09/fender-bender-defender.html
+
+Dependencies: libSDL and libSDL_gfx
+
+To configure:
+	device_definitions.h contains what should be all of the configurable numbers.
+	SCREEN_* ENV_* and CAR_* are the ones you should change, as well as entries
+	in the deviceDefinitions array.
+
+	ENV_* determines the size, in meters, of the rectangular block surrounding
+	the car. I recommend a height slightly greater than your car (Too much
+	greater and it'll report your garage ceiling as an obstruction). A width and
+	height of your car + 4 feet in either direction.
+
+	SCREEN_WIDTH and SCREEN_HEIGHT are for the display. It scales all the data
+	for the ENV cube into that screen width. The scaling algorithm is pretty
+	slow, so I keep it small for testing :D.
+
+	CAR_* are just handy #defines used for the positioning. Similarly, BOX_TOP
+	and TABLE_TOP are what I use for testing in my apartment.
+
+	deviceDefinitions:
+	   <deviceId>, <baseX>, <baseY>, <baseZ>, <horizAngle>, <vertAngle>
+		 deviceId: Device #0 or #1. If you have just two, that's it. When plugging
+							 them in, unplugging it, etc, that can change ordering, so just
+							 swap the device IDs.
+	   baseX/Y/Z: The location of the center of the Kinect, within the cube
+		            defined by ENV_* (0,0,0 is bottom south-west corner)
+     horizAngle: 0 is pointing straight ahead, 90 is to the right.
+		 vertAngle: 0 is pointing straight ahead, 90 is straight up.
+	
+	The default setup in deviceDefinitions is for two kinects, approximately
+	1.4 feet above the ground, both pointing straight ahead, and 1.5 meters
+	apart from each other.
+
+To compile:
+	All you should need to do is "make" - it will compile the external libraries
+	(libusb and libfreenect), then compile CarBoundary itself.
+
+	libusb and libfreenect are contained in ext/, purely because they weren't
+	available in my package management, and it made it easier to test on all
+	three of my machines by including it. The libusb has a patch in it that
+	supposedly makes it work on OS X, but doesn't harm it on other platforms.
+
+To run: ./boundary_run
