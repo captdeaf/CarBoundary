@@ -5,7 +5,7 @@
  */
 
 /* Pixels of height for SDL screen. */
-#define SCREEN_WIDTH 320
+#define SCREEN_WIDTH 400
 #define SCREEN_HEIGHT 400
 
 /* Size of environment scanner in meters. */
@@ -16,12 +16,18 @@
 
 /* Car information: For rendering a car on the screen. Units are in meters.
  */
-#define CAR_LEFT 5.0
-#define CAR_RIGHT 7.0
-#define CAR_FRONT 10.0
-#define CAR_REAR 5.0
+// The car is 64 inches wide.
+#define CAR_LEFT (6.0 - 0.8128)
+#define CAR_RIGHT (6.0 + 0.8128)
 
+// And 175 inches long.
+#define CAR_FRONT (7.5 + 2.2225)
+#define CAR_REAR (7.5 - 2.2225)
 
+// Car top is 59 inches (1.4986 meters) above the ground.
+#define CAR_TOP 1.4986
+
+// Testing stuff.
 #define TABLE_TOP 0.7874
 #define BOX_TOP 0.4318
 
@@ -41,11 +47,16 @@ struct _kdevice_definition_ {
 /* This list _must_ end in a device id < 0. */
 /* <device id>, <baseX>, <baseY>, <baseZ>, <horiz angle>, <vert angle> */
 struct _kdevice_definition_ deviceDefinitions[] = {
+	// Placed on top of my car.
+  // The cameras are 40 inches (1.016m) apart
+	// They are on my car's roof, 81 inches behind the front of the car.
+  {1,  6.0 - 0.508, CAR_FRONT - 2.05, CAR_TOP, 0.0, 0.0},
+  {0,  6.0 + 0.508, CAR_FRONT - 2.05, CAR_TOP, 0.0, 0.0},
   // One, on a box, pointing straight ahead.
   // {0,  6.0, CAR_FRONT, BOX_TOP, 0.0, 0.0},
   // Two, on boxes, pointing straight ahead.
-  {1,  5.25, CAR_FRONT, BOX_TOP, 0.0, 0.0},
-  {0,  6.75, CAR_FRONT, BOX_TOP, 0.0, 0.0},
+  // {1,  5.25, CAR_FRONT, BOX_TOP, 0.0, 0.0},
+  // {0,  6.75, CAR_FRONT, BOX_TOP, 0.0, 0.0},
   // Default: One, on table top.
   // {0,  6.0, CAR_FRONT, TABLE_TOP, 0.0, 0.0},
   // Two, pointing straight ahead.
@@ -64,7 +75,7 @@ struct _kdevice_definition_ deviceDefinitions[] = {
 #define NULL_COLOR 0xFFFFCC
 
 /* How many pixels should recognize a cube before it's recognized? */
-#define MIN_COUNT 3
+#define MIN_COUNT 5
 
 /* Constants for the Kinect devices. */
 #define SENSOR_WIDTH 640
